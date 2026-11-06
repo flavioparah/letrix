@@ -34,9 +34,97 @@ function bell(freq){if(!audio||audio.state!=='running')return;const osc=audio.cr
 sound.onclick=async()=>{if(!audio){audio=new AudioContext();mix=audio.createGain();mix.gain.value=.28;mix.connect(audio.destination);voices=[0,1,2].map((i)=>{const v=audio.createOscillator(),g=audio.createGain();v.type=i===0?'triangle':'sine';g.gain.value=.055/(i+1);v.connect(g).connect(mix);v.start();return v});tune(moment)}
 const enable=sound.getAttribute('aria-pressed')!=='true';if(enable)await audio.resume();else await audio.suspend();sound.setAttribute('aria-pressed',String(enable));sound.setAttribute('aria-label',enable?'Silenciar trilha':'Ativar trilha sonora');sound.textContent=enable?'♪':'♫';if(enable)bell(220)};
 function trace(text,x,y,z,project){const spacing=.115;[...text].forEach((c,i)=>project(x+i*spacing,y,z,c,'#d2ddd0',.18))}
+const chapters = {
+ line: 'A estação da nascente',
+ mirror: 'Sala dos espelhos',
+ booth: 'Achados e perdidos'
+};
+const spaces = {};
+for (const place of Object.keys(chapters)) {
+ const glyphs = [];
+ spaces[place] = glyphs;
+ function mark(x,y,z,g,c,s=.19){glyphs.push({x,y,z,g,c,s})}
+ for(let z=-3;z<12;z+=.28)for(let x=-5;x<5;x+=.27){
+  const rail=place==='line'&&Math.abs(Math.abs(x)-3)<.14;
+  mark(x,0,z,rail?'═':'·',rail?'#d7b581':'#596b68');
+ }
+ for(let x=-5;x<5;x+=.22)for(let y=.2;y<4;y+=.23)
+  mark(x,y,9,place==='line'?'≡':place==='mirror'?'┆':'▤',place==='line'?'#626d70':place==='mirror'?'#507774':'#746557');
+ for(let z=-1;z<9;z+=2)for(let y=.1;y<3.9;y+=.18)
+  for(let x of [-4.6,4.6])mark(x,y,z,'▥','#979784',.25);
+ if(place==='mirror'||place==='booth'){
+  for(let x=-2.4;x<2.5;x+=.13)for(let y of [.5,3.1])mark(x,y,5,'─','#b8ccbc');
+  for(let y=.5;y<3.2;y+=.12)for(let x of [-2.4,2.4])mark(x,y,5,'│','#b8ccbc');
+ }
+ if(place==='booth'){
+  for(let j=0;j<14;j++)for(let i=-6;i<=6;i++){
+   if(Math.abs(i)>3&&j>5)continue;
+   mark(i*.10,2.35-j*.094,6.5,'v','#b96958',.145)
+  }
+  for(let x=1.7;x<3.6;x+=.1)for(let y of [.55,.83])mark(x,y,7,'═','#c6ad88');
+ }
+}
+let discovered=new Set(), aligned=false;
+function travel(place){
+ moment=place;stage=0;px=0;pz=-1;yaw=0;tilt=.04;hits=[];response='';aligned=false;discovered.clear();
+ transition=performance.now();tune(place==='mirror'?'spring':place==='booth'?'quiet':place);bell(330);
+ document.title='Letrix · '+chapters[place];
+}
+function chapterWords(){
+ if(moment==='line'){
+  if(discovered.size===2)return [['REFLEXO',-.75,1.8,8.85,'mirror']];
+  return [['PASSOS',-2.3,.55,4,'steps'],['GOTAS',1.4,1.8,6,'drops']].filter(w=>!discovered.has(w[4]))
+ }
+ if(moment==='mirror'){
+  if(stage===1)return [['LIA',1,1.65,7,'booth']];
+  return [['FUNÇÃO',-1.2,2.2,5,'role'],['CRACHÁ',.7,1.35,5,'badge']]
+ }
+ if(stage===2)return [['RELER',-.5,2.6,8.8,'restart']];
+ if(stage===1)return [['BANCO',2,.95,7,'returnCoat']];
+ return aligned?[['VOLTO',-.6,1.8,6.42,'coat']]:[];
+}
+function chapterAction(action){
+ if(chapters[action]){travel(action);return}
+ if(action==='restart'){location.href=location.pathname;return}
+ if(action==='steps'||action==='drops')discovered.add(action);
+ if(action==='role'||action==='badge'){
+  discovered.add(action);
+  if(discovered.size===2)stage=1;
+ }
+ if(action==='coat')stage=1;
+ if(action==='returnCoat')stage=2;
+ hits=[];bell(stage===2?523.25:392);
+}
+function chapterText(project,t){
+ const write=(str,x,y,z)=>trace(str,x,y,z,project);
+ write(chapters[moment].toUpperCase(),-1.25,3.5,8.8);
+ if(moment==='line'){
+  if(discovered.has('steps'))write('O último trem traz minha filha.',-2.7,1.4,4);
+  if(discovered.has('drops'))write('No vidro, a água guarda um rosto.',-.4,2.4,6)
+ }
+ if(moment==='mirror'){
+  const drift=Math.sin(t*.7)*.7;
+  for(let i=0;i<12;i++)for(let j=-2;j<=2;j++)project(.9+drift+j*.09,2-i*.1,7,'·','#a7c9c0',.18);
+  if(discovered.has('role'))write('OPERADORA',-1.3,2.7,4.95);
+  if(discovered.has('badge'))write('O turno termina. Ela fica.',-.85,1.05,4.95);
+  if(stage===1)write('Quem espera depois do turno?',-1.7,2.8,7)
+ }
+ if(moment==='booth'){
+  if(stage===0){
+   write('MÃE, EU',-1.36,1.76,5);write('NO ÚLTIMO.',.6,1.76,5);
+   if(!aligned)write('VOLTO',-.6,1.8,6.42);
+   write('A costura completa o vidro.',-1.5,2.9,5);
+   for(let x=-.34;x<=.35;x+=.12)project(x,.05,2.1,'◇','#dec58f',.18);
+   aligned=Math.abs(px)<.75&&Math.abs(pz-2.1)<1.25&&Math.cos(yaw)>.78;
+  }else if(stage===1)write('Guardei lugar para ela.',1.05,2,7);
+  else {write('Lia alisa a manga. Duas batidas.',-1.9,2,7);write('Do outro lado, alguém responde.',-1.85,1.65,7)}
+ }
+}
+
 let stage=0, response='', echoAt=-10000;
 function enter(action){
- if(action==='home'){stage=0;tune('court');pz=-5;px=0;yaw=0;tilt=.04;response='';transition=performance.now();return}
+ if(moment!=='court'){chapterAction(action);return}
+ if(action==='home'){travel('line');return}
  if(action==='inspect'){stage=1;response='A voz volta da pedra. Troque o meio.';bell(220)}
  if(action==='repeat'){response='EGO. A pedra devolve a mesma voz.';bell(196)}
  if(action==='letter'){stage=2;response='';bell(330)}
@@ -50,6 +138,7 @@ function available(action){
  return action==='home'
 }
 function valid(x,z){
+ if(moment!=='court')return Math.abs(x)<4.5&&z> -2.8&&z<8.9;
  return Math.abs(x)<11&&z> -8&&z<15&&!(z>3.48&&z<5&&Math.abs(x)>1.4&&Math.abs(x)<4.83)
 }
 function tap(x,y){
@@ -78,16 +167,16 @@ let focal=Math.min(H*.93,W*.97),horizon=H*.48+tilt*focal;
 ctx.fillStyle=moment==='echo'?'#17120e':moment==='spring'?'#061513':'#05090b';ctx.fillRect(0,0,W,H);
 let buckets=Array.from({length:100},()=>[]);
 function project(x,y,z,g,c,size){let dx=x-px,dz=z-pz,depth=dx*sn+dz*cs;if(depth<.25)return;let scale=focal/depth,X=W*.5+(dx*cs-dz*sn)*scale,Y=horizon-(y-1.55)*scale;if(X< -35||X>W+35||Y< -35||Y>H+35)return;buckets[Math.min(99,Math.floor(depth*4))].push([X,Y,g,c,Math.min(90,Math.max(2,Math.round(size*scale)))])}
-const words=writings.court.filter(w=>available(w[4]));hits=[];
-for(let p of courtyard){
+const words=moment==='court'?writings.court.filter(w=>available(w[4])):chapterWords();hits=[];
+for(let p of (moment==='court'?courtyard:spaces[moment])){
  if(words.some(([word,x,y,z])=>Math.abs(p.z-z)<.34&&p.x>x-.14&&p.x<x+word.length*.235+.1&&p.y>y-.26&&p.y<y+.12))continue;let x=p.x,y=p.y;if(p.kind==='grass')x+=.1*Math.sin(t*2+p.z*.7)*y;if(p.kind==='ripple')y+=.045*Math.sin(t*1.8+p.z+p.x);if(p.kind==='fire')y+=.12*Math.sin(t*5+p.phase);project(x,y,p.z,p.g,p.c,p.s)}
 // Project each letter from its own fixed point on the inscription.
 for(const [word,x,y,z,to] of words){
- const mid=x+(word.length-1)*.1175,near=Math.hypot(px-mid,pz-z)<3.65;let bounds={left:Infinity,right:-Infinity,top:Infinity,bottom:-Infinity,depth:Infinity,to};
+ const mid=x+(word.length-1)*.1175,near=Math.hypot(px-mid,pz-z)<(to==='coat'?5.6:3.65);let bounds={left:Infinity,right:-Infinity,top:Infinity,bottom:-Infinity,depth:Infinity,to};
  for(let i=0;i<word.length;i++){
  const wx=x+i*.235,dx=wx-px,dz=z-pz,d=dx*sn+dz*cs;if(d<.35)continue;
  // The courtyard arch hides inscriptions behind its masonry.
- if(pz<3.8&&z>4.8){let k=(3.8-pz)/(z-pz),cross=px+k*dx;if(Math.abs(cross)>1.6&&Math.abs(cross)<4.7)continue}
+ if(moment==='court'&&pz<3.8&&z>4.8){let k=(3.8-pz)/(z-pz),cross=px+k*dx;if(Math.abs(cross)>1.6&&Math.abs(cross)<4.7)continue}
  let scale=focal/d,X=W/2+(dx*cs-dz*sn)*scale,Y=horizon-(y-1.55)*scale,size=Math.min(90,.35*scale);
  project(wx,y,z,word[i],near?'#fff3d0':moment==='spring'?'#c5e8cf':'#ebcf93',.35);
  bounds.left=Math.min(bounds.left,X-5);bounds.right=Math.max(bounds.right,X+size*.65+5);bounds.top=Math.min(bounds.top,Y-size-6);bounds.bottom=Math.max(bounds.bottom,Y+7);bounds.depth=Math.min(bounds.depth,d)
@@ -98,6 +187,7 @@ for(const [word,x,y,z,to] of words){
  hits.push(bounds)
  }
 }
+if(moment!=='court')chapterText(project,t);else {
 if(stage===1){trace('E _ O',-.28,2.4,3.77,project);trace(response,-2.05,2.98,3.7,project)}
 if(stage===0)trace('Quem fala quando digo eu?',-1.42,2.95,3.72,project);
 if(stage===3){
@@ -105,8 +195,12 @@ if(stage===3){
  trace('Quem a ouviu?',-.85,1.98,3.72,project);
  for(let i=0;i<90;i++){let a=i*.0698,r=.25+((ms-echoAt)/1600%1)*1.2;project(Math.cos(a)*r,.65+Math.sin(a)*r,8,'·','#9dc6bc',.13)}
 }
+}
 for(let b=99;b>=0;b--)for(let [x,y,g,c,s] of buckets[b]){ctx.font=s+'px monospace';ctx.fillStyle=c;ctx.fillText(g,x,y)}
-for(const h of hits){const x=h.left-4,y=h.top+2,w=h.right-h.left+8,height=h.bottom-h.top-4;ctx.strokeStyle='#ead8a0';ctx.lineWidth=1.4;ctx.beginPath();for(const [cx,cy,sx,sy] of [[x,y,1,1],[x+w,y,-1,1],[x,y+height,1,-1],[x+w,y+height,-1,-1]]){ctx.moveTo(cx+sx*6,cy);ctx.lineTo(cx,cy);ctx.lineTo(cx,cy+sy*5)}ctx.stroke();if(stage===0){ctx.font='12px monospace';ctx.fillStyle='#fff1c8';ctx.fillText('toque',x+w/2-16,y+height+16)}}
-ctx.fillStyle='#9db8bb55';ctx.font='12px monospace';for(let i=0;i<55;i++){let y=(i*971+t*(175+i%5*15))%(H+20),x=((i*673-y*.22)%(W+20)+W+20)%(W+20);ctx.fillText('╱',x,y)}
-let fade=1-(ms-transition)/850;if(fade>0){ctx.fillStyle="rgba(4,9,10,"+Math.min(1,fade)+")";ctx.fillRect(0,0,W,H)}requestAnimationFrame(frame)}requestAnimationFrame(frame);
+for(const h of hits){const x=h.left-4,y=h.top+2,w=h.right-h.left+8,height=h.bottom-h.top-4;ctx.strokeStyle='#ead8a0';ctx.lineWidth=1.4;ctx.beginPath();for(const [cx,cy,sx,sy] of [[x,y,1,1],[x+w,y,-1,1],[x,y+height,1,-1],[x+w,y+height,-1,-1]]){ctx.moveTo(cx+sx*6,cy);ctx.lineTo(cx,cy);ctx.lineTo(cx,cy+sy*5)}ctx.stroke();if(moment==='court'&&stage===0){ctx.font='12px monospace';ctx.fillStyle='#fff1c8';ctx.fillText('toque',x+w/2-16,y+height+16)}}
+ctx.fillStyle='#9db8bb55';ctx.font='12px monospace';for(let i=0;i<(moment==='court'?55:0);i++){let y=(i*971+t*(175+i%5*15))%(H+20),x=((i*673-y*.22)%(W+20)+W+20)%(W+20);ctx.fillText('╱',x,y)}
+let fade=1-(ms-transition)/850;if(fade>0){ctx.fillStyle="rgba(4,9,10,"+Math.min(1,fade)+")";ctx.fillRect(0,0,W,H)}requestAnimationFrame(frame)}
+const initial=location.hash.slice(1);
+if(Object.hasOwn(chapters,initial))travel(initial);
+requestAnimationFrame(frame);
 </script></html>
